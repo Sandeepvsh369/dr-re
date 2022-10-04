@@ -1,0 +1,351 @@
+provider "aws" {
+  region     = "ap-south-1"
+  access_key = "AKIAZ4E3DLTAX32L7TEL"
+  secret_key = "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"
+}
+
+/* resource "aws_instance" "app" {
+   ami = "ami-0851b76e8b1bce90b"
+  instance_type = "t2.micro"
+
+   tags = {
+      Name = "Test"
+ }
+}  
+
+
+resource "aws_vpc" "myvpc" {
+    cidr_block = "10.0.0.0/16"
+   tags = {
+       Name = "Myvpc"
+    }
+}
+
+resource "aws_subnet" "mysubnet" {
+    vpc_id = aws_vpc.myvpc.id 
+    cidr_block = "10.0.9.0/24"
+    tags = {
+        Name = "Mysubnet"
+    }
+} */
+
+
+
+
+# 1. create vpc
+# 2. create Internet gateway
+# 3. create custom route table
+# 4. create subnet
+# 5. associate subnet with route table
+# 6. create security group to allow port 22,80,443
+# 7. create a network interface with an IP in the subnet
+# 8. assign an elastic IP to the network interface created 
+# 9. create an ubuntu server and install/enable httpd
+
+#1
+resource "aws_vpc" "provpc" {
+  cidr_block = "10.0.0.0/16"
+  tags = {
+    "Name" = "Provpc"
+  }
+}
+#2
+resource "aws_internet_gateway" "Igw" {
+  vpc_id = aws_vpc.provpc.id
+  tags = {
+    "Name" = "Pro Igw"
+  }
+}
+#3
+resource "aws_route_table" "rt" {
+  vpc_id = aws_vpc.provpc.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.Igw.id
+  }
+  tags = {
+    "Name" = "Route"
+  }
+}
+#4
+resource "aws_subnet" "prosubnet" {
+  vpc_id            = aws_vpc.provpc.id
+  cidr_block        = "10.0.18.0/24"
+  availability_zone = "ap-south-1a"
+  tags = {
+    "Name" = "Pro Subnet"
+  }
+}
+#5
+resource "aws_route_table_association" "rt_asso" {
+  subnet_id      = aws_subnet.prosubnet.id
+  route_table_id = aws_route_table.rt.id
+}
+#6
+resource "aws_security_group" "allow" {
+  name        = "allow web traffic"
+  description = "Allow TLS inbound traffic"
+  vpc_id      = aws_vpc.provpc.id
+
+  ingress {
+    description = "HTTPs"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  ingress {
+    description = "SSH"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  ingress {
+    description = "HTTP"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+  }
+
+  tags = {
+    Name = "Pro Security Group"
+  }
+}
+#7
+resource "aws_network_interface" "network" {
+  subnet_id       = aws_subnet.prosubnet.id
+  private_ips     = ["10.0.18.9"]
+  security_groups = [aws_security_group.allow.id]
+}
+#8
+resource "aws_eip" "myeip" {
+  vpc                       = true
+  network_interface         = aws_network_interface.network.id
+  associate_with_private_ip = "10.0.18.9"
+  depends_on                = [aws_internet_gateway.Igw]
+  tags = {
+    "Name" = "MyEIP"
+  }
+}
+
+output "server_private_ip" {
+  value = aws_eip.myeip.private_ip
+}
+
+resource "aws_instance" "webin" {
+  ami           = "ami-0756a1c858554433e"
+  instance_type = "t2.micro"
+  key_name      = "Devops"
+  connection {
+    type        = "ssh"
+    user        = "ubuntu"
+    private_key = file("C:/Users/ccsan/Downloads/Devops.pem")
+    host        = self.public_ip
+  }
+
+  tags = {
+    "Name" = "Provi"
+  }
+}
+
+
+
+/* resource "aws_instance" "ec2_example" {
+  ami = "ami-0756a1c858554433e"
+  instance_type = "t2.micro"
+  key_name = "Devops"
+  connection {
+    type = "ssh"
+    user = "ubuntu"
+    private_key = "${file("C:/users/ccsan/Downloads/Devops.pem")}"
+    host = "${self.public_ip}"
+  }
+  provisioner "local-exec" {
+    command = "echo ${self.private_ip}, ${self.public_ip} >> private_and_public_ips.txt"
+  }
+  tags = {
+    "Name" = "Terraform EC2"
+  }
+}
+
+data "aws_instance" "ec2_example" {
+  filter {
+    name = "tag:Name"
+    values = ["Terraform EC2"]
+  }
+  depends_on = [
+    "aws_instance.ec2_example"
+  ]
+}
+
+output "fetched_info_from_aws" {
+  value = data.aws_instance.ec2_example.public_ip
+} */
+
+
+/* resource "tls_private_key" "generated" {
+  algorithm = "RSA"
+}
+
+resource "local_file" "private_key_pem" {
+  content  = tls_private_key.generated.private_key_pem
+  filename = "Devops.pem"
+} 
+
+
+
+
+
+
+
+/*#9
+resource "aws_instance" "ProEc2" {
+  ami = "ami-0851b76e8b1bce90b"
+  instance_type = "t2.micro"
+  availability_zone = "ap-south-1a"
+  key_name = "Devops"
+  connection {
+    type = "ssh"
+    user = "ubuntu"
+    private_key = "${file("C:/users/ccsan/Downloads/Devops.pem")}"
+    host = "${self.public_ip}"
+  }
+  provisioner "remote-exec" {
+    inline = [
+      "sudo apt install apache2-bin -y"
+    ]
+  }
+  network_interface {
+    device_index = 0
+    network_interface_id = aws_network_interface.network.id
+  }
+  tags = {
+    "Name" = "ProEC2"
+  }
+}
+
+
+resource "aws_s3_bucket" "mybucket" {
+  bucket = "my-new-tf-bucket"
+  tags = {
+    Name = "Bucbucbuc"
+    Purpose = "Intro to Resource block"
+  }
+}
+
+resource "aws_s3_bucket_acl" "acl" {
+  bucket = aws_s3_bucket.mybucket.id
+  acl = "private"
+}
+
+data "aws_availability_zones" "available" {}
+data "aws_region" "current" {}
+
+locals {
+  team        = "api_mgmt_dev"
+  application = "corp_api"
+  server_name = "ec2-${var.environment}-api-${var.var_sub_az}"
+}
+
+resource "aws_vpc" "vpc" {
+  cidr_block = var.var_sub_cidr
+  tags = {
+    Name        = var.vpc_name
+    Environment = "demo_environment"
+    Terraform   = "true"
+    Region      = data.aws_region.current.name
+  }
+}
+
+resource "aws_subnet" "public_subnets" {
+  for_each = var.public_subnets
+  vpc_id = aws_vpc.vpc.id
+  cidr_block = cidrsubnet(var.vpc_cidr, 8, each.value + 100)
+  availability_zone = "ap-south-1a"
+  map_public_ip_on_launch = true
+  tags = {
+    Name = each.key
+    Terraform = "true"
+  }
+}
+
+resource "aws_route_table" "public_route_table" {
+  vpc_id = aws_vpc.vpc.id
+  route  {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.internet_gateway.id
+  }
+  tags = {
+    "Name" = "demo_public_rtb"
+    Terraform = "true"
+  }
+} 
+
+resource "aws_route_table_association" "public" {
+  depends_on = [aws_subnet.public_subnets]
+  route_table_id = aws_route_table.public_route_table.id
+  for_each = aws_subnet.public_subnets
+  subnet_id = each.value.id
+}
+
+resource "aws_internet_gateway" "internet_gateway" {
+  vpc_id = aws_vpc.vpc.id
+  tags = {
+    "Name" = "demo_igw"
+  }
+}
+
+resource "aws_eip" "nat_gateway_eip" {
+  vpc = true
+  depends_on = [aws_internet_gateway.internet_gateway]
+  tags = {
+    "Name" = "demo_igw_eip"
+  }
+}
+
+resource "aws_nat_gateway" "nat_gateway" {
+  depends_on = [aws_subnet.public_subnets]
+  allocation_id = aws_eip.nat_gateway_eip.id
+  subnet_id = aws_subnet.public_subnets["public_subnet_1"].id
+  tags = {
+    "Name" = "demo_nat_gateway"
+  }
+}
+data "aws_ami" "ubuntu" {
+  most_recent = true
+  owners      = ["678930111681"]
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+}
+
+resource "aws_instance" "web_server" {
+  ami = data.aws_ami.ubuntu.id
+  instance_type = "t2.micro"
+  subnet_id = aws_subnet.public_subnets["public_subnet_1"].id
+  tags = {
+    Name = local.server_name
+    Owner = local.team
+    App = local.application
+  }
+} */
+
+
+
