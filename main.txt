@@ -1,8 +1,4 @@
-provider "aws" {
-  region     = "ap-south-1"
-  access_key = "AKIAZ4E3DLTAX32L7TEL"
-  secret_key = "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"
-}
+
 
 /* resource "aws_instance" "app" {
    ami = "ami-0851b76e8b1bce90b"
